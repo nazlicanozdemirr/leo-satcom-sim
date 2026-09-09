@@ -1,0 +1,31 @@
+# Python caches and test artefacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Python/Conda environments
+.venv/
+venv/
+env/
+.conda/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# GNU Radio temporary/generated build directories
+grcc_out/
+build/
+dist/
+*.egg-info/
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.bak
+*~
+

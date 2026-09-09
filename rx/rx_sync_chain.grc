@@ -1,0 +1,661 @@
+options:
+  parameters:
+    author: LEO Satcom Sim
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: TX -> LEO channel -> matched RRC -> Costas -> Gardner timing recovery
+    copyright: ''
+    description: Phase 3 QPSK synchronization and lock-metric visualization
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: rx_sync_chain
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: LEO RX Synchronization Chain
+    window_size: (1300,850)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    rotation: 0
+    state: enabled
+
+blocks:
+- name: import_project
+  id: import
+  parameters:
+    alias: ''
+    comment: ''
+    imports: |-
+      import random
+      from config import params
+      from gnuradio.filter import firdes
+      from channel.leo_channel_model import BOLTZMANN_J_PER_K
+      from rx.rx_sync_chain import make_rx_rrc_taps
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 16]
+    rotation: 0
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: params.samp_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [256, 16]
+    rotation: 0
+    state: enabled
+- name: sym_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: params.sym_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [384, 16]
+    rotation: 0
+    state: enabled
+- name: sps
+  id: variable
+  parameters:
+    comment: ''
+    value: params.sps
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [504, 16]
+    rotation: 0
+    state: enabled
+- name: ebno_db
+  id: variable
+  parameters:
+    comment: Test Eb/No in dB
+    value: '6.0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [616, 16]
+    rotation: 0
+    state: enabled
+- name: effective_t_sys
+  id: variable
+  parameters:
+    comment: Convert normalized QPSK Eb/No noise power into the channel kTB interface.
+    value: (sps / (2.0 * params.ldpc_code_rate * 10.0**(ebno_db / 10.0))) / (BOLTZMANN_J_PER_K * params.signal_bandwidth_hz)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [736, 16]
+    rotation: 0
+    state: enabled
+- name: qpsk_constellation
+  id: variable
+  parameters:
+    comment: ''
+    value: digital.constellation_qpsk().base()
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [920, 16]
+    rotation: 0
+    state: enabled
+- name: inverse_pre_diff
+  id: variable
+  parameters:
+    comment: Undo the Phase 2 QPSK pre-differential label mapping.
+    value: '[list(qpsk_constellation.pre_diff_code()).index(i) for i in range(4)]'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1112, 16]
+    rotation: 0
+    state: enabled
+- name: rx_rrc_taps
+  id: variable
+  parameters:
+    comment: Same roll-off and tap count as TX, with unit receiver gain.
+    value: make_rx_rrc_taps(samp_rate, sym_rate, params.rrc_rolloff, params.rrc_ntaps)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 104]
+    rotation: 0
+    state: enabled
+- name: payload_bits
+  id: variable
+  parameters:
+    comment: ''
+    value: tuple(random.Random(params.tx_random_seed).choices((0, 1), k=params.ldpc_k_short * 1000))
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [208, 104]
+    rotation: 0
+    state: enabled
+- name: blocks_vector_source_x_0
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Complete 64-bit payload blocks for the TX hierarchy.
+    data: payload_bits
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 256]
+    rotation: 0
+    state: enabled
+- name: epy_tx_chain
+  id: epy_block
+  parameters:
+    _source_code: |-
+      """GRC adapter for the reusable Phase 2 transmitter."""
+
+      import inspect
+      import numpy as np
+      from gnuradio import gr
+      from tx.tx_chain import tx_chain
+
+
+      class blk(gr.basic_block):
+          """Expose the config-driven TX hierarchy."""
+
+          def __new__(cls):
+              """Return the tested reusable GNU Radio hierarchy."""
+              if any(frame.function == "extract" for frame in inspect.stack()):
+                  return super().__new__(cls)
+              return tx_chain()
+
+          def __init__(self):
+              """Expose the factory signature to GRC."""
+              gr.basic_block.__init__(
+                  self,
+                  "LEO TX Chain",
+                  in_sig=[np.uint8],
+                  out_sig=[np.complex64],
+              )
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    _io_cache: ('LEO TX Chain', 'blk', [], [('0', 'byte', 1)], [('0', 'complex', 1)], 'Expose the config-driven TX hierarchy.', [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [224, 256]
+    rotation: 0
+    state: enabled
+- name: blocks_throttle2_0
+  id: blocks_throttle2
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: GUI-only rate limiter.
+    ignoretag: 'True'
+    limit: auto
+    maximum: '0.1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samples_per_second: samp_rate
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [416, 256]
+    rotation: 0
+    state: enabled
+- name: epy_leo_channel
+  id: epy_block
+  parameters:
+    _source_code: |-
+      """GRC adapter for the reusable Phase 1 LEO channel."""
+
+      import inspect
+      import numpy as np
+      from gnuradio import gr
+      from channel.leo_channel_model import leo_channel_model
+
+
+      class blk(gr.basic_block):
+          """Expose the LEO channel with synchronization-test defaults."""
+
+          def __new__(cls, t_sys_kelvin=1.0, doppler_max_hz=8000.0):
+              """Return the tested reusable GNU Radio hierarchy."""
+              if any(frame.function == "extract" for frame in inspect.stack()):
+                  return super().__new__(cls)
+              return leo_channel_model(
+                  t_sys_kelvin=t_sys_kelvin,
+                  doppler_max_hz=doppler_max_hz,
+                  phase_noise_std=0.0,
+                  scintillation_std_db=0.0,
+                  path_loss_db=0.0,
+              )
+
+          def __init__(self, t_sys_kelvin=1.0, doppler_max_hz=8000.0):
+              """Expose the factory signature to GRC."""
+              gr.basic_block.__init__(
+                  self,
+                  "LEO Channel Model",
+                  in_sig=[np.complex64],
+                  out_sig=[np.complex64],
+              )
+    affinity: ''
+    alias: ''
+    comment: Eb/No=6 dB AWGN plus slowly varying 8 kHz Doppler; no path loss scaling.
+    doppler_max_hz: '8000.0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    t_sys_kelvin: effective_t_sys
+  states:
+    _io_cache: ('LEO Channel Model', 'blk', [('t_sys_kelvin', '1.0'), ('doppler_max_hz', '8000.0')], [('0', 'complex', 1)], [('0', 'complex', 1)], 'Expose the LEO channel with synchronization-test defaults.', [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [608, 256]
+    rotation: 0
+    state: enabled
+- name: fir_filter_xxx_0
+  id: fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Matched RRC; retains 4 samples/symbol for Gardner.
+    decim: '1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: rx_rrc_taps
+    type: ccf
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [816, 256]
+    rotation: 0
+    state: enabled
+- name: digital_costas_loop_cc_0
+  id: digital_costas_loop_cc
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Fourth-order QPSK carrier/phase tracking loop.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    order: '4'
+    use_snr: 'False'
+    w: params.costas_loop_bw
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1000, 256]
+    rotation: 0
+    state: enabled
+- name: digital_symbol_sync_xx_0
+  id: digital_symbol_sync_xx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Non-data-aided Gardner timing recovery, one output sample/symbol.
+    constellation: qpsk_constellation
+    damping: '1.0'
+    loop_bw: params.timing_loop_bw
+    max_dev: '1.5'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    nfilters: '128'
+    osps: '1'
+    pfb_mf_taps: '[]'
+    resamp_type: digital.IR_MMSE_8TAP
+    sps: sps
+    ted_gain: '1.0'
+    ted_type: digital.TED_GARDNER
+    type: cc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1192, 256]
+    rotation: 0
+    state: enabled
+- name: digital_constellation_decoder_cb_0
+  id: digital_constellation_decoder_cb
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Hard QPSK symbol decisions after carrier and timing lock.
+    constellation: qpsk_constellation
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1440, 256]
+    rotation: 0
+    state: enabled
+- name: digital_diff_decoder_bb_0
+  id: digital_diff_decoder_bb
+  parameters:
+    affinity: ''
+    alias: ''
+    coding: digital.DIFF_DIFFERENTIAL
+    comment: Undo Phase 2 mod-4 coding and remove Costas fourfold absolute-phase ambiguity.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    modulus: '4'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1680, 256]
+    rotation: 0
+    state: enabled
+- name: digital_map_bb_0
+  id: digital_map_bb
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Restore original Gray-labelled dibit indices.
+    map: inverse_pre_diff
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1904, 256]
+    rotation: 0
+    state: enabled
+- name: blocks_unpack_k_bits_bb_0
+  id: blocks_unpack_k_bits_bb
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Convert QPSK dibits back to one bit per byte.
+    k: '2'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2072, 256]
+    rotation: 0
+    state: enabled
+- name: blocks_null_sink_0
+  id: blocks_null_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    bus_structure: '[[0,],]'
+    comment: LDPC/frame decoding follows in a later phase.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '1'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2264, 256]
+    rotation: 0
+    state: enabled
+- name: qtgui_time_sink_costas
+  id: qtgui_time_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'True'
+    axislabels: 'True'
+    color1: blue
+    color10: dark blue
+    color2: red
+    color3: green
+    color4: black
+    color5: cyan
+    color6: magenta
+    color7: yellow
+    color8: dark red
+    color9: dark green
+    comment: Frequency, phase and detector error settle when the Costas loop locks.
+    ctrlpanel: 'False'
+    entags: 'True'
+    grid: 'True'
+    gui_hint: ''
+    label1: Frequency estimate
+    label10: ''
+    label2: Phase estimate
+    label3: Phase detector error
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    marker1: '-1'
+    marker10: '-1'
+    marker2: '-1'
+    marker3: '-1'
+    marker4: '-1'
+    marker5: '-1'
+    marker6: '-1'
+    marker7: '-1'
+    marker8: '-1'
+    marker9: '-1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"Costas Lock Metrics"'
+    nconnections: '3'
+    size: '4096'
+    srate: samp_rate
+    stemplot: 'False'
+    style1: '1'
+    style10: '1'
+    style2: '1'
+    style3: '1'
+    style4: '1'
+    style5: '1'
+    style6: '1'
+    style7: '1'
+    style8: '1'
+    style9: '1'
+    tr_chan: '0'
+    tr_delay: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: float
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    ylabel: Loop metric
+    ymax: '1'
+    ymin: '-1'
+    yunit: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1216, 448]
+    rotation: 0
+    state: enabled
+- name: qtgui_time_sink_timing
+  id: qtgui_time_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'True'
+    axislabels: 'True'
+    color1: blue
+    color10: dark blue
+    color2: red
+    color3: green
+    color4: black
+    color5: cyan
+    color6: magenta
+    color7: yellow
+    color8: dark red
+    color9: dark green
+    comment: Gardner timing detector error settles around zero at lock.
+    ctrlpanel: 'False'
+    entags: 'True'
+    grid: 'True'
+    gui_hint: ''
+    label1: Gardner timing error
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    marker1: '-1'
+    marker10: '-1'
+    marker2: '-1'
+    marker3: '-1'
+    marker4: '-1'
+    marker5: '-1'
+    marker6: '-1'
+    marker7: '-1'
+    marker8: '-1'
+    marker9: '-1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"Gardner Timing Error"'
+    nconnections: '1'
+    size: '4096'
+    srate: sym_rate
+    stemplot: 'False'
+    style1: '1'
+    style10: '1'
+    style2: '1'
+    style3: '1'
+    style4: '1'
+    style5: '1'
+    style6: '1'
+    style7: '1'
+    style8: '1'
+    style9: '1'
+    tr_chan: '0'
+    tr_delay: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: float
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    ylabel: Timing error
+    ymax: '1'
+    ymin: '-1'
+    yunit: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1480, 448]
+    rotation: 0
+    state: enabled
+
+connections:
+- [blocks_vector_source_x_0, '0', epy_tx_chain, '0']
+- [epy_tx_chain, '0', blocks_throttle2_0, '0']
+- [blocks_throttle2_0, '0', epy_leo_channel, '0']
+- [epy_leo_channel, '0', fir_filter_xxx_0, '0']
+- [fir_filter_xxx_0, '0', digital_costas_loop_cc_0, '0']
+- [digital_costas_loop_cc_0, '0', digital_symbol_sync_xx_0, '0']
+- [digital_costas_loop_cc_0, '1', qtgui_time_sink_costas, '0']
+- [digital_costas_loop_cc_0, '2', qtgui_time_sink_costas, '1']
+- [digital_costas_loop_cc_0, '3', qtgui_time_sink_costas, '2']
+- [digital_symbol_sync_xx_0, '0', digital_constellation_decoder_cb_0, '0']
+- [digital_symbol_sync_xx_0, '1', qtgui_time_sink_timing, '0']
+- [digital_constellation_decoder_cb_0, '0', digital_diff_decoder_bb_0, '0']
+- [digital_diff_decoder_bb_0, '0', digital_map_bb_0, '0']
+- [digital_map_bb_0, '0', blocks_unpack_k_bits_bb_0, '0']
+- [blocks_unpack_k_bits_bb_0, '0', blocks_null_sink_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.12.0

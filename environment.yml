@@ -1,0 +1,11 @@
+name: leo-satcom-sim
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - gnuradio>=3.10
+  - numpy
+  - scipy
+  - matplotlib
+  - pyyaml
+

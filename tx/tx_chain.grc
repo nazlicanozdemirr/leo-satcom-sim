@@ -1,0 +1,361 @@
+options:
+  parameters:
+    author: LEO Satcom Sim
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: Ideal Phase 2 transmitter; no channel block is present.
+    copyright: ''
+    description: LDPC coded, PN63 framed, differential Gray-QPSK transmitter
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: no_gui
+    hier_block_src_path: '.:'
+    id: tx_chain
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: LEO TX Chain
+    window_size: (1200,800)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    rotation: 0
+    state: enabled
+
+blocks:
+- name: import_project
+  id: import
+  parameters:
+    alias: ''
+    comment: Load all transmitter constants from the Phase 0 configuration.
+    imports: |-
+      from pathlib import Path
+      import random
+      from config import params
+      from gnuradio.filter import firdes
+      from tx.tx_chain import unit_energy_qpsk_points
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 16]
+    rotation: 0
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: params.samp_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [264, 16]
+    rotation: 0
+    state: enabled
+- name: sym_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: params.sym_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [392, 16]
+    rotation: 0
+    state: enabled
+- name: sps
+  id: variable
+  parameters:
+    comment: ''
+    value: params.sps
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [512, 16]
+    rotation: 0
+    state: enabled
+- name: qpsk_constellation
+  id: variable
+  parameters:
+    comment: GNU Radio Gray-labelled QPSK object
+    value: digital.constellation_qpsk().base()
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [624, 16]
+    rotation: 0
+    state: enabled
+- name: alist_path
+  id: variable
+  parameters:
+    comment: Launch GRC from the project root.
+    value: str((Path.cwd() / 'data' / 'ldpc_128_64_regular.alist').resolve())
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [824, 16]
+    rotation: 0
+    state: enabled
+- name: rrc_taps
+  id: variable
+  parameters:
+    comment: Interpolating RRC taps; gain=sps keeps symbol amplitude normalized.
+    value: firdes.root_raised_cosine(sps, samp_rate, sym_rate, params.rrc_rolloff, params.rrc_ntaps)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1000, 16]
+    rotation: 0
+    state: enabled
+- name: payload_bits
+  id: variable
+  parameters:
+    comment: Deterministic random 64-bit payload blocks for standalone execution.
+    value: tuple(random.Random(params.tx_random_seed).choices((0, 1), k=params.ldpc_k_short * 100))
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 112]
+    rotation: 0
+    state: enabled
+- name: ldpc_encoder_object
+  id: variable_ldpc_encoder_def
+  parameters:
+    comment: Deterministic full-rank (3,6)-regular rate-1/2 LDPC encoder object.
+    dim1: '1'
+    dim2: '1'
+    file: alist_path
+    ndim: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [240, 104]
+    rotation: 0
+    state: enabled
+- name: blocks_vector_source_x_0
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Repeating random message source; every 64 bytes form one payload block.
+    data: payload_bits
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 280]
+    rotation: 0
+    state: enabled
+- name: fec_extended_encoder_0
+  id: fec_extended_encoder
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Encode each k=64 message block into one n=128 LDPC codeword.
+    encoder_list: ldpc_encoder_object
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    puncpat: '''11'''
+    threadtype: none
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [232, 280]
+    rotation: 0
+    state: enabled
+- name: epy_frame_builder
+  id: epy_block
+  parameters:
+    _source_code: |-
+      """GRC adapter for the reusable PN63 frame builder."""
+
+      from tx.tx_chain import _FramePreambleInserter
+
+
+      class blk(_FramePreambleInserter):
+          """Insert PN63 before each encoded payload and append one pad bit."""
+
+          def __init__(self):
+              """Create the project frame builder with config defaults."""
+              super().__init__()
+    affinity: ''
+    alias: ''
+    comment: Preamble is outside LDPC so the encoder still receives exactly 64 payload bits.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    _io_cache: ('PN63 frame builder', 'blk', [], [('0', 'byte', 1)], [('0', 'byte', 1)], 'Insert PN63 before each encoded payload and append one pad bit.', [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [464, 280]
+    rotation: 0
+    state: enabled
+- name: blocks_pack_k_bits_bb_0
+  id: blocks_pack_k_bits_bb
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Pack the 192-bit frame into 96 QPSK dibit indices.
+    k: '2'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [680, 280]
+    rotation: 0
+    state: enabled
+- name: digital_map_bb_0
+  id: digital_map_bb
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Apply constellation pre-differential map so Gray labels become phase increments.
+    map: qpsk_constellation.pre_diff_code()
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [856, 280]
+    rotation: 0
+    state: enabled
+- name: digital_diff_encoder_bb_0
+  id: digital_diff_encoder_bb
+  parameters:
+    affinity: ''
+    alias: ''
+    coding: digital.DIFF_DIFFERENTIAL
+    comment: Mod-4 differential coding resolves the QPSK Costas loop's fourfold phase ambiguity.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    modulus: '4'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1048, 280]
+    rotation: 0
+    state: enabled
+- name: digital_chunks_to_symbols_xx_0
+  id: digital_chunks_to_symbols_xx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Map the differential indices to unit-power Gray-labelled QPSK points.
+    dimension: '1'
+    in_type: byte
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_ports: '1'
+    out_type: complex
+    symbol_table: unit_energy_qpsk_points(qpsk_constellation)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1208, 280]
+    rotation: 0
+    state: enabled
+- name: interp_fir_filter_xxx_0
+  id: interp_fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: RRC pulse shaping and x4 interpolation using Phase 0 parameters.
+    interp: sps
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: rrc_taps
+    type: ccf
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1440, 280]
+    rotation: 0
+    state: enabled
+- name: blocks_throttle2_0
+  id: blocks_throttle2
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Standalone flowgraph rate limiter; remove when connected to hardware.
+    ignoretag: 'True'
+    limit: auto
+    maximum: '0.1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samples_per_second: samp_rate
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1640, 280]
+    rotation: 0
+    state: enabled
+- name: blocks_null_sink_0
+  id: blocks_null_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    bus_structure: '[[0,],]'
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '1'
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1840, 280]
+    rotation: 0
+    state: enabled
+
+connections:
+- [blocks_vector_source_x_0, '0', fec_extended_encoder_0, '0']
+- [fec_extended_encoder_0, '0', epy_frame_builder, '0']
+- [epy_frame_builder, '0', blocks_pack_k_bits_bb_0, '0']
+- [blocks_pack_k_bits_bb_0, '0', digital_map_bb_0, '0']
+- [digital_map_bb_0, '0', digital_diff_encoder_bb_0, '0']
+- [digital_diff_encoder_bb_0, '0', digital_chunks_to_symbols_xx_0, '0']
+- [digital_chunks_to_symbols_xx_0, '0', interp_fir_filter_xxx_0, '0']
+- [interp_fir_filter_xxx_0, '0', blocks_throttle2_0, '0']
+- [blocks_throttle2_0, '0', blocks_null_sink_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.12.0

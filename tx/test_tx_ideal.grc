@@ -1,0 +1,367 @@
+options:
+  parameters:
+    author: LEO Satcom Sim
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: No channel, noise, Doppler, timing error, or carrier error.
+    copyright: ''
+    description: Ideal matched-filter constellation check for the Phase 2 transmitter
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: test_tx_ideal
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: Ideal TX QPSK Constellation
+    window_size: (900,700)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    rotation: 0
+    state: enabled
+
+blocks:
+- name: import_project
+  id: import
+  parameters:
+    alias: ''
+    comment: ''
+    imports: |-
+      import random
+      from config import params
+      from gnuradio.filter import firdes
+      from rx.rx_sync_chain import make_rx_rrc_taps
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 16]
+    rotation: 0
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: params.samp_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [224, 16]
+    rotation: 0
+    state: enabled
+- name: sym_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: params.sym_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [352, 16]
+    rotation: 0
+    state: enabled
+- name: sps
+  id: variable
+  parameters:
+    comment: ''
+    value: params.sps
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [472, 16]
+    rotation: 0
+    state: enabled
+- name: qpsk_constellation
+  id: variable
+  parameters:
+    comment: ''
+    value: digital.constellation_qpsk().base()
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [584, 16]
+    rotation: 0
+    state: enabled
+- name: rx_rrc_taps
+  id: variable
+  parameters:
+    comment: Unit-gain ideal matched RRC used only to observe symbol instants.
+    value: make_rx_rrc_taps(samp_rate, sym_rate, params.rrc_rolloff, params.rrc_ntaps)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [784, 16]
+    rotation: 0
+    state: enabled
+- name: payload_bits
+  id: variable
+  parameters:
+    comment: ''
+    value: tuple(random.Random(params.tx_random_seed).choices((0, 1), k=params.ldpc_k_short * 100))
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 104]
+    rotation: 0
+    state: enabled
+- name: blocks_vector_source_x_0
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Repeat complete 64-bit LDPC payload blocks.
+    data: payload_bits
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 240]
+    rotation: 0
+    state: enabled
+- name: epy_tx_chain
+  id: epy_block
+  parameters:
+    _source_code: |-
+      """GRC adapter for the reusable Phase 2 transmitter."""
+
+      import inspect
+      import numpy as np
+      from gnuradio import gr
+      from tx.tx_chain import tx_chain
+
+
+      class blk(gr.basic_block):
+          """Expose the config-driven TX hierarchy in the ideal GUI test."""
+
+          def __new__(cls):
+              """Return the tested reusable GNU Radio hierarchy."""
+              if any(frame.function == "extract" for frame in inspect.stack()):
+                  return super().__new__(cls)
+              return tx_chain()
+
+          def __init__(self):
+              """Expose the factory signature to GRC."""
+              gr.basic_block.__init__(
+                  self,
+                  "LEO TX Chain",
+                  in_sig=[np.uint8],
+                  out_sig=[np.complex64],
+              )
+    affinity: ''
+    alias: ''
+    comment: Full LDPC + PN63 + differential Gray-QPSK + TX RRC hierarchy.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    _io_cache: ('LEO TX Chain', 'blk', [], [('0', 'byte', 1)], [('0', 'complex', 1)], 'Expose the config-driven TX hierarchy in the ideal GUI test.', [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [232, 240]
+    rotation: 0
+    state: enabled
+- name: blocks_throttle2_0
+  id: blocks_throttle2
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: GUI-only rate limiter.
+    ignoretag: 'True'
+    limit: auto
+    maximum: '0.1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samples_per_second: samp_rate
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [448, 240]
+    rotation: 0
+    state: enabled
+- name: fir_filter_xxx_0
+  id: fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Ideal matched RRC and exact x4 decimation; not a channel or synchronizer.
+    decim: sps
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: rx_rrc_taps
+    type: ccf
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [648, 240]
+    rotation: 0
+    state: enabled
+- name: digital_constellation_decoder_cb_0
+  id: digital_constellation_decoder_cb
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Hard symbol decisions at ideal symbol instants.
+    constellation: qpsk_constellation
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [880, 184]
+    rotation: 0
+    state: enabled
+- name: blocks_null_sink_0
+  id: blocks_null_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    bus_structure: '[[0,],]'
+    comment: Consume ideal hard decisions; RX decoding is a later phase.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '1'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1120, 184]
+    rotation: 0
+    state: enabled
+- name: qtgui_const_sink_x_0
+  id: qtgui_const_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'True'
+    axislabels: 'True'
+    color1: '"blue"'
+    color10: '"dark blue"'
+    color2: '"red"'
+    color3: '"green"'
+    color4: '"black"'
+    color5: '"cyan"'
+    color6: '"magenta"'
+    color7: '"yellow"'
+    color8: '"dark red"'
+    color9: '"dark green"'
+    comment: Four compact points are expected because no channel impairment is present.
+    grid: 'True'
+    gui_hint: ''
+    label1: Ideal matched-filter QPSK
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    marker1: '0'
+    marker10: '0'
+    marker2: '0'
+    marker3: '0'
+    marker4: '0'
+    marker5: '0'
+    marker6: '0'
+    marker7: '0'
+    marker8: '0'
+    marker9: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"Ideal TX QPSK"'
+    nconnections: '1'
+    size: '4096'
+    style1: '0'
+    style10: '0'
+    style2: '0'
+    style3: '0'
+    style4: '0'
+    style5: '0'
+    style6: '0'
+    style7: '0'
+    style8: '0'
+    style9: '0'
+    tr_chan: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: complex
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    xmax: '2'
+    xmin: '-2'
+    ymax: '2'
+    ymin: '-2'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [880, 328]
+    rotation: 0
+    state: enabled
+
+connections:
+- [blocks_vector_source_x_0, '0', epy_tx_chain, '0']
+- [epy_tx_chain, '0', blocks_throttle2_0, '0']
+- [blocks_throttle2_0, '0', fir_filter_xxx_0, '0']
+- [fir_filter_xxx_0, '0', digital_constellation_decoder_cb_0, '0']
+- [fir_filter_xxx_0, '0', qtgui_const_sink_x_0, '0']
+- [digital_constellation_decoder_cb_0, '0', blocks_null_sink_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.12.0

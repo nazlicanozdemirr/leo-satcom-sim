@@ -1,0 +1,6 @@
+target_ber=1e-05
+ebno_uncoded_at_target_db=9.51213
+ebno_ldpc_at_target_db=7.62563
+coding_gain_db=1.8865
+ebno_viterbi_at_target_db=7.71865
+max_uncoded_theory_deviation_db=0.11354

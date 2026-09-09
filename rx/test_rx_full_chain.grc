@@ -1,0 +1,478 @@
+options:
+  parameters:
+    author: LEO Satcom Sim
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: Selectable FEC full receiver with live constellation and rolling EVM.
+    copyright: ''
+    description: Phase 4 TX to channel to synchronization to FEC decode visualization
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: test_rx_full_chain
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: LEO Full RX FEC and EVM
+    window_size: (1200,800)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    rotation: 0
+    state: enabled
+
+blocks:
+- name: decoder_type
+  id: variable
+  parameters:
+    comment: Use "uncoded", "ldpc" or "viterbi"; TX and RX must match.
+    value: '"ldpc"'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [464, 16]
+    rotation: 0
+    state: enabled
+- name: ebno_db
+  id: variable
+  parameters:
+    comment: Live channel Eb/No
+    value: '8.0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [344, 16]
+    rotation: 0
+    state: enabled
+- name: effective_t_sys
+  id: variable
+  parameters:
+    comment: Normalized Eb/No converted to the Phase 1 kTB interface.
+    value: (params.sps / (2.0 * code_rate_for(decoder_type) * 10.0**(ebno_db / 10.0)))
+      / (BOLTZMANN_J_PER_K * params.signal_bandwidth_hz)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [600, 16]
+    rotation: 0
+    state: enabled
+- name: payload_bits
+  id: variable
+  parameters:
+    comment: Complete 64-bit payload blocks.
+    value: tuple(random.Random(params.tx_random_seed).choices((0, 1), k=params.ldpc_k_short
+      * 1000))
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [864, 16]
+    rotation: 0
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: params.samp_rate
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [224, 16]
+    rotation: 0
+    state: enabled
+- name: blocks_null_sink_codeword
+  id: blocks_null_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    bus_structure_sink: '[[0,],]'
+    comment: Pre-FEC hard codeword output.
+    num_inputs: '1'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1008, 264]
+    rotation: 0
+    state: enabled
+- name: blocks_null_sink_payload
+  id: blocks_null_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    bus_structure_sink: '[[0,],]'
+    comment: Decoded payload output.
+    num_inputs: '1'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1008, 184]
+    rotation: 0
+    state: enabled
+- name: blocks_throttle2_0
+  id: blocks_throttle2
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: GUI-only rate limiter.
+    ignoretag: 'True'
+    limit: auto
+    maximum: '0.1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samples_per_second: samp_rate
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [424, 224]
+    rotation: 0
+    state: enabled
+- name: blocks_vector_source_x_0
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: byte
+    vector: (0, 0, 0)
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [16, 224]
+    rotation: 0
+    state: enabled
+- name: epy_channel
+  id: epy_block
+  parameters:
+    _source_code: "\"\"\"GRC adapter for the Phase 1 LEO channel.\"\"\"\n\nimport\
+      \ inspect\nimport numpy as np\nfrom gnuradio import gr\nfrom channel.leo_channel_model\
+      \ import leo_channel_model\n\n\nclass blk(gr.basic_block):\n    \"\"\"Expose\
+      \ AWGN-only defaults for the FEC/EVM view.\"\"\"\n\n    def __new__(cls, t_sys_kelvin=1.0):\n\
+      \        \"\"\"Return the tested reusable GNU Radio hierarchy.\"\"\"\n     \
+      \   if any(frame.function == \"extract\" for frame in inspect.stack()):\n  \
+      \          return super().__new__(cls)\n        return leo_channel_model(\n\
+      \            t_sys_kelvin=t_sys_kelvin,\n            doppler_max_hz=0.0,\n \
+      \           phase_noise_std=0.0,\n            scintillation_std_db=0.0,\n  \
+      \          path_loss_db=0.0,\n        )\n\n    def __init__(self, t_sys_kelvin=1.0):\n\
+      \        \"\"\"Expose the factory signature to GRC.\"\"\"\n        gr.basic_block.__init__(\n\
+      \            self,\n            \"LEO Channel Model\",\n            in_sig=[np.complex64],\n\
+      \            out_sig=[np.complex64],\n        )"
+    affinity: ''
+    alias: ''
+    comment: AWGN-only view keeps FEC comparison deterministic.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    t_sys_kelvin: effective_t_sys
+  states:
+    _io_cache: ('LEO Channel Model', 'blk', [('t_sys_kelvin', '1.0')], [('0', 'complex',
+      1)], [('0', 'complex', 1)], 'Expose AWGN-only defaults for the FEC/EVM view.',
+      [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [608, 224]
+    rotation: 0
+    state: enabled
+- name: epy_evm
+  id: epy_block
+  parameters:
+    _source_code: "\"\"\"GRC adapter for analysis.evm_calc.EVMStreamBlock.\"\"\"\n\
+      \nfrom analysis.evm_calc import EVMStreamBlock\n\n\nclass blk(EVMStreamBlock):\n\
+      \    \"\"\"Expose rolling QPSK EVM percentage.\"\"\"\n\n    def __init__(self,\
+      \ window_size=1000):\n        \"\"\"Construct the shared EVM measurement block.\"\
+      \"\"\n        super().__init__(window_size=window_size)"
+    affinity: ''
+    alias: ''
+    comment: Same nearest-QPSK formula as the offline EVM report.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    window_size: params.evm_window_symbols
+  states:
+    _io_cache: "('QPSK rolling EVM (%)', 'EVMStreamBlock', [('window_size', '1000')],\
+      \ [('0', 'complex', 1)], [('0', 'float', 1)], 'Kayan pencereli QPSK EVM y\xFC\
+      zdesini Number Sink i\xE7in ak\u0131\u015F olarak \xFCret.', ['window_size'])"
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1280, 168.0]
+    rotation: 0
+    state: enabled
+- name: epy_fec_tx
+  id: epy_block
+  parameters:
+    _source_code: "\"\"\"GRC adapter for the selectable Phase 4 FEC transmitter.\"\
+      \"\"\n\nimport inspect\nimport numpy as np\nfrom gnuradio import gr\nfrom rx.rx_full_chain\
+      \ import fec_tx_chain\n\n\nclass blk(gr.basic_block):\n    \"\"\"Expose matching\
+      \ LDPC or convolutional coding.\"\"\"\n\n    def __new__(cls, decoder_type=\"\
+      ldpc\"):\n        \"\"\"Return the tested reusable GNU Radio hierarchy.\"\"\"\
+      \n        if any(frame.function == \"extract\" for frame in inspect.stack()):\n\
+      \            return super().__new__(cls)\n        return fec_tx_chain(decoder_type=decoder_type)\n\
+      \n    def __init__(self, decoder_type=\"ldpc\"):\n        \"\"\"Expose the factory\
+      \ signature to GRC.\"\"\"\n        gr.basic_block.__init__(\n            self,\n\
+      \            \"Selectable FEC TX Chain\",\n            in_sig=[np.uint8],\n\
+      \            out_sig=[np.complex64],\n        )"
+    affinity: ''
+    alias: ''
+    comment: ''
+    decoder_type: decoder_type
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    _io_cache: ('Selectable FEC TX Chain', 'blk', [('decoder_type', "'ldpc'")], [('0',
+      'byte', 1)], [('0', 'complex', 1)], 'Expose matching LDPC or convolutional coding.',
+      [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [224, 224]
+    rotation: 0
+    state: enabled
+- name: epy_full_rx
+  id: epy_block
+  parameters:
+    _source_code: "\"\"\"GRC adapter for the complete Phase 4 receiver.\"\"\"\n\n\
+      import inspect\nimport numpy as np\nfrom gnuradio import gr\nfrom rx.rx_full_chain\
+      \ import rx_full_chain\n\n\nclass blk(gr.basic_block):\n    \"\"\"Expose synchronized\
+      \ symbols and selected FEC output.\"\"\"\n\n    def __new__(cls, decoder_type=\"\
+      ldpc\"):\n        \"\"\"Return the tested reusable GNU Radio hierarchy.\"\"\"\
+      \n        if any(frame.function == \"extract\" for frame in inspect.stack()):\n\
+      \            return super().__new__(cls)\n        return rx_full_chain(decoder_type=decoder_type)\n\
+      \n    def __init__(self, decoder_type=\"ldpc\"):\n        \"\"\"Expose the factory\
+      \ signature to GRC.\"\"\"\n        gr.basic_block.__init__(\n            self,\n\
+      \            \"LEO Full RX Chain\",\n            in_sig=[np.complex64],\n  \
+      \          out_sig=[np.uint8, np.complex64, np.uint8],\n        )"
+    affinity: ''
+    alias: ''
+    comment: Output 0 payload, output 1 synchronized symbols, output 2 hard codeword
+      bits.
+    decoder_type: decoder_type
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    _io_cache: ('LEO Full RX Chain', 'blk', [('decoder_type', "'ldpc'")], [('0', 'complex',
+      1)], [('0', 'byte', 1), ('1', 'complex', 1), ('2', 'byte', 1)], 'Expose synchronized
+      symbols and selected FEC output.', [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [800, 224]
+    rotation: 0
+    state: enabled
+- name: import_project
+  id: import
+  parameters:
+    alias: ''
+    comment: ''
+    imports: 'import random
+
+      from config import params
+
+      from channel.leo_channel_model import BOLTZMANN_J_PER_K
+
+      from rx.rx_full_chain import code_rate_for'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [64, 24.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_const_sink_x_0
+  id: qtgui_const_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'True'
+    axislabels: 'True'
+    color1: '"blue"'
+    color10: '"dark blue"'
+    color2: '"red"'
+    color3: '"green"'
+    color4: '"black"'
+    color5: '"cyan"'
+    color6: '"magenta"'
+    color7: '"yellow"'
+    color8: '"dark red"'
+    color9: '"dark green"'
+    comment: Costas and Gardner synchronized QPSK symbols.
+    grid: 'True'
+    gui_hint: ''
+    label1: Synchronized QPSK
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    marker1: '0'
+    marker10: '0'
+    marker2: '0'
+    marker3: '0'
+    marker4: '0'
+    marker5: '0'
+    marker6: '0'
+    marker7: '0'
+    marker8: '0'
+    marker9: '0'
+    name: '"Synchronized QPSK"'
+    nconnections: '1'
+    size: '4096'
+    style1: '0'
+    style10: '0'
+    style2: '0'
+    style3: '0'
+    style4: '0'
+    style5: '0'
+    style6: '0'
+    style7: '0'
+    style8: '0'
+    style9: '0'
+    tr_chan: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: complex
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    xmax: '2'
+    xmin: '-2'
+    ymax: '2'
+    ymin: '-2'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1280, 244.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_number_sink_evm
+  id: qtgui_number_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    autoscale: 'False'
+    avg: '0.05'
+    color1: ("blue", "red")
+    color10: ("black", "black")
+    color2: ("black", "black")
+    color3: ("black", "black")
+    color4: ("black", "black")
+    color5: ("black", "black")
+    color6: ("black", "black")
+    color7: ("black", "black")
+    color8: ("black", "black")
+    color9: ("black", "black")
+    comment: Rolling 1000-symbol RMS EVM from analysis/evm_calc.py.
+    factor1: '1'
+    factor10: '1'
+    factor2: '1'
+    factor3: '1'
+    factor4: '1'
+    factor5: '1'
+    factor6: '1'
+    factor7: '1'
+    factor8: '1'
+    factor9: '1'
+    graph_type: qtgui.NUM_GRAPH_HORIZ
+    gui_hint: ''
+    label1: RMS EVM
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    max: '100'
+    min: '0'
+    name: '"QPSK EVM"'
+    nconnections: '1'
+    type: float
+    unit1: '%'
+    unit10: ''
+    unit2: ''
+    unit3: ''
+    unit4: ''
+    unit5: ''
+    unit6: ''
+    unit7: ''
+    unit8: ''
+    unit9: ''
+    update_time: '0.10'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1488, 164.0]
+    rotation: 0
+    state: enabled
+
+connections:
+- [blocks_throttle2_0, '0', epy_channel, '0']
+- [blocks_vector_source_x_0, '0', epy_fec_tx, '0']
+- [epy_channel, '0', epy_full_rx, '0']
+- [epy_evm, '0', qtgui_number_sink_evm, '0']
+- [epy_fec_tx, '0', blocks_throttle2_0, '0']
+- [epy_full_rx, '0', blocks_null_sink_payload, '0']
+- [epy_full_rx, '1', epy_evm, '0']
+- [epy_full_rx, '1', qtgui_const_sink_x_0, '0']
+- [epy_full_rx, '2', blocks_null_sink_codeword, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.12.0
