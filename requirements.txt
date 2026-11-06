@@ -1,6 +1,6 @@
 gnuradio>=3.10
-numpy
-scipy
-matplotlib
-pyyaml
+matplotlib>=3.8
+numpy>=1.26
+pyyaml>=6.0
+scipy>=1.11
 
